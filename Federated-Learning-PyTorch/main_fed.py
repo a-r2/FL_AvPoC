@@ -13,128 +13,116 @@ from Module.Aggregation import federated_average
 from Module.utils import get_dataset
 from Module.Update import LocalUpdate
 from Module.test_utils import test_model
+from Module.settingsParser import args_parser_fed
 
-"""   
-        SETTINGS
-    
-"""
-settings = {}
-# Dataset
-settings["dataset"] = 'mnist'
-settings["num_classes"] = 10
-# Local Learning
-settings["local_epoch"] = 10
-settings["local_batch"] = 8
-# Local Optimizer
-settings["optimizer"] = 'sgd'
-settings["lr"] = 0.01
-settings["momentum"] = 0.5
-settings["weight_decay"] = 1e-4
-# Local Loss Function
-settings["criterion"] = torch.nn.NLLLoss()
-# Federated settings
-settings["rounds"] = 10
-settings["num_clients"] = 10
-settings["frac"] = 1
-settings["iid"] = 3 # 'Default set to IID. Set to 0 for IID. 1 - low non-IID, 2 - medium non-IID, 3 - large non-IID'
-settings["unequal"] = 0 # 'whether to use unequal data splits for non-i.i.d setting (use 0 for equal splits)'
 
-start_time = time.time()
+def main(settings):
 
-# BUILD MODEL
-global_model = CNNmodel()
+    print(settings)
 
-if torch.cuda.device_count():
-    torch.cuda.set_device(0)
-    settings["device"] = 'cuda'
-else:
-    settings["device"] = 'cpu'
+    if settings.criterion == 'Nllloss':
+        settings.criterion = torch.nn.NLLLoss()
 
-# load dataset and user groups
-train_dataset, test_dataset, client_groups = get_dataset(settings)
+    start_time = time.time()
 
-# Set the model to train and send it to device.
-global_model.to(settings["device"])
-global_model.train()
-print(global_model)
+    # BUILD MODEL
+    global_model = CNNmodel()
 
-# copy weights
-global_weights = global_model.state_dict()
+    if torch.cuda.device_count():
+        torch.cuda.set_device(0)
+        settings.device = 'cuda'
+    else:
+        settings.device = 'cpu'
 
-# Training
-train_loss, train_acc = [], []
-val_acc_list, net_list = [], []
-print_every_round = 2
+    # load dataset and user groups
+    train_dataset, test_dataset, client_groups = get_dataset(settings)
 
-for epoch in tqdm(range(settings["rounds"])):
-    local_weights, local_losses = [], []
-    print(f'\n | Global Training Round : {epoch+1} |\n')
-
+    # Set the model to train and send it to device.
+    global_model.to(settings.device)
     global_model.train()
-    numClients = max(int(settings["frac"] * settings["num_clients"]), 1)
-    indexes_clients = np.random.choice(range(settings["num_clients"]), numClients, replace=False)
+    print(global_model)
 
-    for id_client in indexes_clients:
-        local_model = LocalUpdate(settings=settings, dataset=train_dataset, indexes=client_groups[id_client])
-        w, loss = local_model.update_weights(model=copy.deepcopy(global_model), global_round=epoch, client = id_client)
-        local_weights.append(copy.deepcopy(w))
-        local_losses.append(copy.deepcopy(loss))
+    # copy weights
+    global_weights = global_model.state_dict()
 
-    # update global weights dict
-    global_weights = federated_average(local_weights)
+    # Training
+    train_loss, train_acc = [], []
+    print_every_round = 2
 
-    # update global model
-    global_model.load_state_dict(global_weights)
+    for epoch in tqdm(range(settings.rounds)):
+        local_weights, local_losses = [], []
+        print(f'\n | Global Training Round : {epoch+1} |\n')
 
-    loss_avg = sum(local_losses) / len(local_losses)
-    train_loss.append(loss_avg)
+        global_model.train()
+        numClients = max(int(settings.frac * settings.num_clients), 1)
+        indexes_clients = np.random.choice(range(settings.num_clients), numClients, replace=False)
 
-    # Calculate avg training accuracy over all users at every epoch
-    list_acc, list_loss = [], []
-    global_model.eval()
-    for client in range(settings["num_clients"]):
-        local_model = LocalUpdate(settings=settings, dataset=train_dataset,indexes=client_groups[client])
-        acc, loss = local_model.inference(model=global_model)
-        list_acc.append(acc)
-        list_loss.append(loss)
-    train_acc.append(sum(list_acc)/len(list_acc))
+        for id_client in indexes_clients:
+            local_model = LocalUpdate(settings=settings, dataset=train_dataset, indexes=client_groups[id_client])
+            w, loss = local_model.update_weights(model=copy.deepcopy(global_model), global_round=epoch, client = id_client)
+            local_weights.append(copy.deepcopy(w))
+            local_losses.append(copy.deepcopy(loss))
 
-    # print global training loss after every 'print_every_round' rounds
-    if (epoch+1) % print_every_round == 0:
-        print(f' \nAvg Training statistics after {epoch+1} global rounds:')
-        print(f'Training Loss : {np.mean(np.array(train_loss))}')
-        print(f'Train Acc: {train_acc[-1]:.3f}% \n')
+        # update global weights dict
+        global_weights = federated_average(local_weights)
 
-# Test the global model.
-test_acc, test_loss = test_model(global_model, test_dataset, settings["criterion"])
+        # update global model
+        global_model.load_state_dict(global_weights)
 
-print(f' \n Results after {settings["rounds"]} rounds of training:')
-print(f"|---- Avg Train Acc: {train_acc[-1]:.3f}%")
-print(f"|---- Test Acc: {test_acc:.3f}%")
-print(f'\n Total Time: {time.time()-start_time:0.2f}')
+        loss_avg = sum(local_losses) / len(local_losses)
+        train_loss.append(loss_avg)
 
-# PLOTTING
-import matplotlib
-import matplotlib.pyplot as plt
-matplotlib.use('Agg')
+        # Calculate avg training accuracy over all users at every epoch
+        list_acc, list_loss = [], []
+        global_model.eval()
+        for client in range(settings.num_clients):
+            local_model = LocalUpdate(settings=settings, dataset=train_dataset,indexes=client_groups[client])
+            acc, loss = local_model.inference(model=global_model)
+            list_acc.append(acc)
+            list_loss.append(loss)
+        train_acc.append(sum(list_acc)/len(list_acc))
 
-plt.figure()
-plt.title('Training Loss vs Rounds')
-plt.plot(range(len(train_loss)), train_loss, color='r')
-plt.ylabel('Training loss')
-plt.xlabel('Rounds')
-plt.show()
-nameFile = f'./save/fed_R[{settings["rounds"]}]_C[{settings["frac"]}]_iid[{settings["iid"]}]_' + \
-                f'E[{settings["local_epoch"]}]_B[{settings["local_batch"]}]_Lr[{settings["lr"]}]_Opt[{settings["optimizer"]}]_loss.png'
-plt.savefig(nameFile)
+        # print global training loss after every 'print_every_round' rounds
+        if (epoch+1) % print_every_round == 0:
+            print(f' \nAvg Training statistics after {epoch+1} global rounds:')
+            print(f'Training Loss : {np.mean(np.array(train_loss))}')
+            print(f'Train Acc: {train_acc[-1]:.3f}% \n')
 
-# Plot Average Accuracy vs Communication rounds
-plt.figure()
-plt.title('Average Accuracy vs Rounds')
-plt.plot(range(len(train_acc)), train_acc, color='k')
-plt.ylabel('Average Accuracy')
-plt.xlabel('Rounds')
-plt.show()
-nameFile = f'./save/fed_R[{settings["rounds"]}]_C[{settings["frac"]}]_iid[{settings["iid"]}]_' + \
-                f'E[{settings["local_epoch"]}]_B[{settings["local_batch"]}]_Lr[{settings["lr"]}]_Opt[{settings["optimizer"]}]_acc.png'
-plt.savefig(nameFile)
+    # Test the global model.
+    test_acc, test_loss = test_model(global_model, test_dataset, settings.criterion)
+
+    print(f' \n Results after {settings.rounds} rounds of training:')
+    print(f"|---- Avg Train Acc: {train_acc[-1]:.3f}%")
+    print(f"|---- Test Acc: {test_acc:.3f}%")
+    print(f'\n Total Time: {time.time()-start_time:0.2f}')
+
+    # PLOTTING
+    import matplotlib
+    import matplotlib.pyplot as plt
+    matplotlib.use('Agg')
+
+    plt.figure()
+    plt.title('Training Loss vs Rounds')
+    plt.plot(range(len(train_loss)), train_loss, color='r')
+    plt.ylabel('Training loss')
+    plt.xlabel('Rounds')
+    plt.show()
+    nameFile = f'./save/fed_R[{settings.rounds}]_C[{settings.frac}]_iid[{settings.iid}]_' + \
+                    f'E[{settings.local_epoch}]_B[{settings.local_batch}]_Lr[{settings.lr}]_Opt[{settings.optimizer}]_loss.png'
+    plt.savefig(nameFile)
+
+    # Plot Average Accuracy vs Communication rounds
+    plt.figure()
+    plt.title('Average Accuracy vs Rounds')
+    plt.plot(range(len(train_acc)), train_acc, color='k')
+    plt.ylabel('Average Accuracy')
+    plt.xlabel('Rounds')
+    plt.show()
+    nameFile = f'./save/fed_R[{settings.rounds}]_C[{settings.frac}]_iid[{settings.iid}]_' + \
+                    f'E[{settings.local_epoch}]_B[{settings.local_batch}]_Lr[{settings.lr}]_Opt[{settings.optimizer}]_acc.png'
+    plt.savefig(nameFile)
+
+if __name__ == "__main__":
+    settings = args_parser_fed()
+    main(settings)
+

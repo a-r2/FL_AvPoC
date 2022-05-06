@@ -32,7 +32,7 @@ def mnist_noniid(dataset, num_clients, shards_per_client=2):
     The lower the "shards_per_client" the more non-IID.
     
     """
-    num_shards = shards_per_client * num_clients # two shards per client
+    num_shards = shards_per_client * num_clients 
     images_per_shard = int(len(dataset)/num_shards)
     #
     index_shard = [i for i in range(num_shards)]
@@ -52,7 +52,8 @@ def mnist_noniid(dataset, num_clients, shards_per_client=2):
         for rand_item in random_set:
             index_of_shard = range(rand_item*images_per_shard,(rand_item+1)*images_per_shard) # "images_per_shard" elements most likely of the same label.
             dict_clients[i] = np.concatenate((dict_clients[i], indexes[index_of_shard]), axis=0)
-    # Safety checks.
+    #
+    # Safety checks 
     # [len(dict_clients[x]) for x in dict_clients.keys()]  # All equal
     # [set([labels[int(y)] for y in list(dict_clients[x])]) for x in dict_clients.keys()] # Only some labels per client.
     return dict_clients
@@ -60,12 +61,12 @@ def mnist_noniid(dataset, num_clients, shards_per_client=2):
 
 def mnist_noniid_unequal(dataset, num_clients, shards_per_client=2):
     """
-    Sample non-I.I.D client data from MNIST dataset s.t clients
-    have unequal amount of data
+    Sample non-I.I.D client data from MNIST dataset 
+    s.t. clients have unequal amount of data
     
     """
     shards_per_client_i_possible = range(0, shards_per_client) # From 0 to "shards_per_client"
-    num_shards = shards_per_client * num_clients # two shards per client
+    num_shards = shards_per_client * num_clients 
     images_per_shard = int(len(dataset)/num_shards)
     #
     index_shard = [i for i in range(num_shards)]
@@ -85,7 +86,8 @@ def mnist_noniid_unequal(dataset, num_clients, shards_per_client=2):
         for rand_item in random_set:
             index_of_shard = range(rand_item*images_per_shard,(rand_item+1)*images_per_shard) # "images_per_shard" elements most likely of the same label.
             dict_clients[i] = np.concatenate((dict_clients[i], indexes[index_of_shard]), axis=0)
-    # Now we set the rest of the shards.
+    #
+    # Now we set the rest of the shards until all shards have been assigned.
     while len(index_shard) > 0: 
         for i in range(num_clients):
             shards_per_client_i = np.random.choice(shards_per_client_i_possible, 1, replace=False) # Random ammount of shards.
@@ -94,6 +96,8 @@ def mnist_noniid_unequal(dataset, num_clients, shards_per_client=2):
             for rand_item in random_set:
                 index_of_shard = range(rand_item*images_per_shard,(rand_item+1)*images_per_shard) # "images_per_shard" elements most likely of the same label.
                 dict_clients[i] = np.concatenate((dict_clients[i], indexes[index_of_shard]), axis=0)
+    #
+    # Safety checks.
     # [len(dict_clients[x]) for x in dict_clients.keys()]
     # [set([labels[int(y)] for y in list(dict_clients[x])]) for x in dict_clients.keys()]
     return dict_clients

@@ -30,15 +30,15 @@ class DatasetSplit(Dataset):
 class LocalUpdate(object):
     def __init__(self, settings, dataset, indexes):
         self.settings = settings
-        self.device = settings["device"]
-        self.criterion = self.settings["criterion"]
+        self.device = settings.device
+        self.criterion = self.settings.criterion 
         self.criterion.to(self.device)
-        self.local_batch = self.settings["local_batch"]
-        self.local_epoch = self.settings["local_epoch"]
-        self.optimizer = self.settings["optimizer"]
-        self.lr = self.settings["lr"]
-        self.momentum = self.settings["momentum"]
-        self.weight_decay = settings["weight_decay"]
+        self.local_batch = self.settings.local_batch
+        self.local_epoch = self.settings.local_epoch
+        self.optimizer = self.settings.optimizer
+        self.lr = self.settings.lr
+        self.momentum = self.settings.momentum
+        self.weight_decay = self.settings.weight_decay
         #
         self.trainloader, self.validloader, self.testloader = self.train_val_test(dataset, list(indexes))
 
@@ -60,7 +60,7 @@ class LocalUpdate(object):
                                 batch_size=self.local_batch, shuffle=False)
         return trainloader, validloader, testloader
 
-    def update_weights(self, model, global_round, client):
+    def update_weights(self, model, global_round, client, verbose = True):
         """
         Perform an iteration of local update.
         """
@@ -87,9 +87,8 @@ class LocalUpdate(object):
                 loss.backward()
                 optimizer.step()
 
-                if batch_index == len(self.trainloader) - 1:
-                    print(f'| Global Round : {global_round} | Client index : {client} | Local Epoch : {iter} | ' +  \
-                          f'\tLoss: {loss.item():.3f}')
+                if batch_index == len(self.trainloader) - 1 and verbose:
+                    print(f'| Global Round : {global_round} | Client index : {client} | Local Epoch : {iter} | \tLoss: {loss.item():.3f}')
                
                 batch_loss.append(loss.item())
             epoch_loss.append(sum(batch_loss)/len(batch_loss))
